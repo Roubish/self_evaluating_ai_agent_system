@@ -2,6 +2,12 @@
 
 This project is a simple self-evaluating AI agent built with LangGraph and Groq. The agent answers a user query, evaluates its own behavior and reasoning, asks a reviewer to check the final output, and revises the answer when the evaluators request changes.
 
+## Live App
+
+Open the deployed Streamlit app here:
+
+https://selfevaluatingaiagentsystem-utdjoyrt5tzypderunqcr5.streamlit.app/
+
 ## What This Project Does
 
 The system runs a small multi-step agent workflow:
@@ -13,7 +19,7 @@ The system runs a small multi-step agent workflow:
 5. The reasoning evaluator checks the quality of the answer logic.
 6. The reviewer checks final output quality.
 7. The router either finishes or sends the answer back for revision.
-8. A final report is printed and saved in the logs folder.
+8. The app shows the tools used, saves the latest report, and keeps the last 5 query results in the Streamlit session history.
 
 ## Workflow
 
@@ -47,7 +53,10 @@ Router
 
 ```text
 self_evaluating_ai_agent_system/
-├── self-evaluating.py      # Main LangGraph agent system
+├── agent_system.py         # Shared LangGraph workflow and run_agent helper
+├── streamlit_app.py        # Streamlit login and agent UI
+├── self-evaluating.py      # CLI runner for the agent system
+├── DEPLOYMENT.md           # Streamlit deployment guide
 ├── README.md               # Project documentation
 ├── requirements.txt        # Python dependencies
 ├── .env.example            # Example environment file
@@ -66,7 +75,7 @@ self_evaluating_ai_agent_system/
 
 ### `AgentState`
 
-`AgentState` is the shared state passed between LangGraph nodes. It stores the query, plan, final response, evaluator feedback, revision count, tool usage count, and call counts.
+`AgentState` is the shared state passed between LangGraph nodes. It stores the query, plan, final response, evaluator feedback, recommended tool, revision count, tool usage count, and call counts.
 
 ### Simulated Tools
 
@@ -77,6 +86,13 @@ The project includes three simple tools:
 - `db_tool`: returns simulated database results.
 
 These tools are not connected to real search or database services yet. They are placeholders for learning the agent workflow.
+
+The worker also recommends a tool from the query text:
+
+- arithmetic or calculation tasks use `code`
+- database-style tasks use `db`
+- lookup or fact-style tasks use `search`
+- simple writing or explanation tasks can use `none`
 
 ### Planner
 
@@ -128,8 +144,8 @@ The final score starts at 10 and subtracts points for slow execution, too many r
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-username/self-evaluating-ai-agent-system.git
-cd self-evaluating-ai-agent-system
+git clone https://github.com/Roubish/self_evaluating_ai_agent_system.git
+cd self_evaluating_ai_agent_system
 ```
 
 If you are already inside this project folder, just open a terminal in:
@@ -177,7 +193,7 @@ Do not upload your real `.env` file to GitHub.
 ### 5. Run the project
 
 ```bash
-python self-evaluating.py
+python3 self-evaluating.py
 ```
 
 The program will ask:
@@ -190,6 +206,26 @@ Example query:
 
 ```text
 Explain what LangGraph is in simple words
+```
+
+### 6. Run the Streamlit app
+
+```bash
+streamlit run streamlit_app.py
+```
+
+The Streamlit app opens with a login screen. Enter a username and email, generate the development verification code, verify it, then ask your question from the welcome screen. The app shows the final answer, plan, tool calls, evaluator feedback, report, and last 5 history items.
+
+## Deployment
+
+Deploy with `streamlit_app.py` as the app entrypoint. Add `GROQ_API_KEY` as a deployment secret, not in your repository.
+
+Full deployment steps are in [`DEPLOYMENT.md`](DEPLOYMENT.md).
+
+After deploying from GitHub, update the live app by committing your changes and running:
+
+```bash
+git push origin main
 ```
 
 ## Example Queries
@@ -237,30 +273,24 @@ After each run, the system saves outputs inside the `logs/` folder:
 - `final_report.txt`: final printed report
 - `system.log`: tool and system activity logs
 
-## Uploading To GitHub
+## Updating GitHub
 
 From inside `self_evaluating_ai_agent_system`, run:
 
 ```bash
-git init
 git add .
-git commit -m "Add self-evaluating AI agent system"
+git commit -m "Describe your change"
+git push origin main
 ```
 
-Create a new empty repository on GitHub, then connect it:
-
-```bash
-git branch -M main
-git remote add origin https://github.com/your-username/self-evaluating-ai-agent-system.git
-git push -u origin main
-```
-
-Important: make sure `.env` is not committed. This project includes `.gitignore` to protect it.
+Important: make sure `.env` is not committed. This project includes `.gitignore` to protect it. Use Streamlit Cloud secrets for `GROQ_API_KEY`.
 
 ## Notes
 
 - The search and database tools are simulated.
 - The code tool only supports simple arithmetic expressions.
+- The Streamlit history keeps the last 5 results in the current browser session.
+- Email verification is development-only and does not send a real email.
 - The evaluator decisions are text-based, so structured JSON output would be a good future improvement.
 - This project is useful for learning LangGraph agent loops, evaluator agents, revision routing, and logging.
 
