@@ -40,6 +40,7 @@ class AgentState(TypedDict, total=False):
     reviewer_calls: int
     revisions: int
     tool_usage: int
+    recommended_tool: str
 
 
 def get_groq_api_key() -> str:
@@ -186,6 +187,19 @@ def is_approved(feedback: str) -> bool:
     return bool(re.search(r"\bapprove\b|\bapproved\b", text))
 
 
+def recommend_tool(query: str) -> str:
+    text = query.lower()
+    if re.search(r"\b(calculate|compute|math|price|discount|total|sum|multiply|divide|percent|percentage)\b", text):
+        return "code"
+    if re.search(r"\d+\s*[-+*/%^]\s*\d+", text):
+        return "code"
+    if re.search(r"\b(database|db|sql|table|record|records|row|rows|stored data|users|orders)\b", text):
+        return "db"
+    if re.search(r"\b(search|find|lookup|look up|latest|current|fact|facts)\b", text):
+        return "search"
+    return "none"
+
+
 def planner(state: AgentState) -> AgentState:
     prompt = f"Create a short plan to solve: {state['query']}"
     plan = get_llm().invoke(prompt).content
@@ -196,6 +210,8 @@ def planner(state: AgentState) -> AgentState:
 
 def worker(state: AgentState) -> AgentState:
     state["worker_calls"] = state.get("worker_calls", 0) + 1
+    recommended_tool = recommend_tool(state["query"])
+    state["recommended_tool"] = recommended_tool
     feedback = (
         f"Behavior: {state.get('behavior_feedback', '')}\n"
         f"Reasoning: {state.get('reasoning_feedback', '')}\n"
@@ -207,7 +223,12 @@ def worker(state: AgentState) -> AgentState:
     Feedback: {feedback}
 
     Available tools: search, code, db.
-    Use Action: none for simple questions that do not need a tool.
+    Recommended tool for this query: {recommended_tool}
+    If the recommended tool is search, code, or db, use that Action unless the feedback clearly says it is wrong.
+    Use Action: code for arithmetic, math, formulas, or small calculations.
+    Use Action: search when the answer needs factual lookup or simulated factual context.
+    Use Action: db when the user asks about records, tables, stored data, or database-like queries.
+    Use Action: none only when the task is already answerable without a tool, such as short explanations, writing, or brainstorming.
     Do not invent tool results.
     Use this exact format:
     Thought: your reasoning

@@ -1,5 +1,6 @@
 import random
 import re
+from datetime import datetime
 
 import streamlit as st
 
@@ -22,6 +23,7 @@ def init_session_state():
         "verification_sent": False,
         "last_run": None,
         "last_query": "",
+        "history": [],
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -70,12 +72,65 @@ def render_action_trace(action_trace):
             st.write(f"Result: {action.get('result', '')}")
 
 
+def get_used_tools(action_trace):
+    return [action.get("tool", "unknown") for action in action_trace]
+
+
+def render_tool_summary(action_trace):
+    tools = get_used_tools(action_trace)
+    if not tools:
+        st.info("Tools used: none")
+        return
+
+    st.success(f"Tools used: {', '.join(tools)}")
+
+
+def save_history(run):
+    state = run["state"]
+    action_trace = state.get("action_trace", [])
+    entry = {
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "query": state.get("query", ""),
+        "answer": state.get("final_response", "No final answer found."),
+        "tools": get_used_tools(action_trace),
+        "score": run.get("score", 0),
+        "execution_time": run.get("execution_time", 0),
+        "revisions": state.get("revisions", 0),
+    }
+    st.session_state.history = [entry, *st.session_state.history][:5]
+
+
+def render_history():
+    history = st.session_state.history
+    if not history:
+        st.write("No history yet.")
+        return
+
+    for index, entry in enumerate(history, start=1):
+        tools = ", ".join(entry["tools"]) if entry["tools"] else "none"
+        with st.expander(f"{index}. {entry['query'][:80]}"):
+            st.write(f"Time: {entry['time']}")
+            st.write(f"Tools used: {tools}")
+            st.write(f"Score: {entry['score']}/10")
+            st.write(f"Execution: {entry['execution_time']:.2f}s")
+            st.write(f"Revisions: {entry['revisions']}")
+            st.markdown("**Answer**")
+            st.write(entry["answer"])
+
+
 def render_agent_app():
     st.title(f"Welcome, {st.session_state.username}")
 
     with st.sidebar:
         st.write("Logged in as")
         st.write(st.session_state.email)
+        st.divider()
+        st.write("Last 5 History")
+        render_history()
+        if st.session_state.history and st.button("Clear history", use_container_width=True):
+            st.session_state.history = []
+            st.rerun()
+        st.divider()
         if st.button("Logout", use_container_width=True):
             st.session_state.authenticated = False
             st.session_state.verification_sent = False
@@ -100,6 +155,7 @@ def render_agent_app():
                     username=st.session_state.username,
                     user_email=st.session_state.email,
                 )
+                save_history(st.session_state.last_run)
             except Exception as exc:
                 st.error(str(exc))
 
@@ -113,6 +169,7 @@ def render_agent_app():
 
     st.subheader("Final Answer")
     st.write(state.get("final_response", "No final answer found."))
+    render_tool_summary(state.get("action_trace", []))
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Score", f"{run['score']}/10")
@@ -120,7 +177,7 @@ def render_agent_app():
     col3.metric("Worker Calls", state.get("worker_calls", 0))
     col4.metric("Revisions", state.get("revisions", 0))
 
-    tabs = st.tabs(["Plan", "Tools", "Evaluations", "Report"])
+    tabs = st.tabs(["Plan", "Tools", "Evaluations", "Report", "History"])
     with tabs[0]:
         st.write(state.get("plan", "No plan found."))
     with tabs[1]:
@@ -135,6 +192,8 @@ def render_agent_app():
     with tabs[3]:
         st.text(run["report"])
         st.caption(f"Saved to {LOG_DIR / 'final_report.txt'}")
+    with tabs[4]:
+        render_history()
 
 
 def main():
